@@ -1,0 +1,1 @@
+# zabbix-n8n-ollama-stack
