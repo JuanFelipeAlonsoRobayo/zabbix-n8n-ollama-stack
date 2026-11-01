@@ -1,0 +1,98 @@
+networks:
+  zabbix_net:
+    driver: bridge
+  ai_net:
+    driver: bridge
+  automation_net:
+    driver: bridge
+
+services:
+  postgres-server:
+    image: postgres:15-alpine
+    container_name: zabbix-db
+    restart: "no"
+    env_file: .env
+    volumes:
+      - ./volumes/postgres_data:/var/lib/postgresql/data
+    networks:
+      - zabbix_net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+  zabbix-server:
+    build:
+      context: ./zabbix-server
+    container_name: zabbix-server
+    restart: "no"
+    env_file: .env
+    environment:
+      - DB_SERVER_HOST=postgres-server
+    depends_on:
+      - postgres-server
+    networks:
+      - zabbix_net
+      - automation_net
+    ports:
+      - "10051:10051"
+    security_opt:
+      - no-new-privileges:true
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
+    container_name: zabbix-web
+    restart: "no"
+    env_file: .env
+    environment:
+      - DB_SERVER_HOST=postgres-server
+      - ZBX_SERVER_HOST=zabbix-server
+      - PHP_TZ=America/Bogota
+    depends_on:
+      - zabbix-server
+    networks:
+      - zabbix_net
+    ports:
+      - "8080:8080"
+    security_opt:
+      - no-new-privileges:true
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: "no"
+    env_file: .env
+    environment:
+      - N8N_HOST=n8n.local
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - GENERIC_TIMEZONE=America/Bogota
+    volumes:
+      - ./volumes/n8n_data:/home/node/.n8n
+    networks:
+      - automation_net
+      - ai_net
+    ports:
+      - "5678:5678"
+    user: "node"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: "no"
+    volumes:
+      - ./volumes/ollama_data:/root/.ollama
+    networks:
+      - ai_net
+    security_opt:
+      - no-new-privileges:true
